@@ -1,0 +1,19 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VSCode
+.vscode/
+
+# Docker
+/data/
+*.log
+.env
+
+
+git remote add origin https://github.com/ClaraMoledo/BDNR2.git
+git branch -M main
+git push -u origin main
