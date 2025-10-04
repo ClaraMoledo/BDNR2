@@ -8,8 +8,8 @@ Chat em tempo real usando FastAPI, WebSockets, Redis (Pub/Sub, presença, rate l
 
 1. Clone o repositório:
    ```
-   git clone https://github.com/Fabricio-prof/aula-2-git-exemplo.git
-   cd aula-2-git-exemplo
+   git clone https://github.com/ClaraMoledo/BDNR2.git
+   cd BDNR2
    ```
 
 2. Crie o arquivo `requirements.txt` e adicione as dependências abaixo:
