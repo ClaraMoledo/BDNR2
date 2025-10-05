@@ -1,201 +1,354 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import time
+import json
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
-# ... (demais imports e configurações)
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketState
+import redis.asyncio as redis
+from motor.motor_asyncio import AsyncIOMotorClient
 
 app = FastAPI()
 
-# ... (demais configurações e rotas)
+# Configuração CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Configuração Redis e MongoDB
+REDIS_URL = "redis://localhost:6379/0"
+MONGO_URL = "mongodb://localhost:27017"
+
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+mongo_client = AsyncIOMotorClient(MONGO_URL)
+mongo_db = mongo_client["chatdb"]
+messages_collection = mongo_db["messages"]
+
+# Rate limiting config
+RATE_LIMIT = 5        # mensagens por minuto
+RATE_LIMIT_WINDOW = 60  # segundos
+
+async def check_rate_limit(user_id: str):
+    key = f"rate:{user_id}"
+    ts = int(time.time())
+    async with redis_client.pipeline(transaction=True) as pipe:
+        await pipe.zadd(key, {str(ts): ts})
+        await pipe.zremrangebyscore(key, 0, ts - RATE_LIMIT_WINDOW)
+        await pipe.zcard(key)
+        await pipe.expire(key, RATE_LIMIT_WINDOW)
+        res = await pipe.execute()
+        count = res[2]
+        if count > RATE_LIMIT:
+            return False
+        return True
+
+async def set_user_online(room: str, user: str, ttl: int=30):
+    key = f"online:{room}"
+    await redis_client.hset(key, user, int(time.time()))
+    await redis_client.expire(key, ttl)
+
+async def get_online_users(room: str):
+    key = f"online:{room}"
+    users = await redis_client.hkeys(key)
+    return users
+
+async def save_message(room: str, user: str, msg: str):
+    doc = {"room": room, "user": user, "msg": msg, "timestamp": int(time.time())}
+    await messages_collection.insert_one(doc)
+    # LPUSH (adiciona mensagem recente) + LTRIM (mantém só as últimas 100)
+    redis_key = f"messages:{room}"
+    await redis_client.lpush(redis_key, json.dumps(doc))
+    await redis_client.ltrim(redis_key, 0, 99)
+
+async def get_last_messages(room: str, limit: int=20):
+    redis_key = f"messages:{room}"
+    msgs = await redis_client.lrange(redis_key, 0, limit-1)
+    return [json.loads(m) for m in msgs]
+
+@app.websocket("/ws/{room}/{user}")
+async def websocket_endpoint(websocket: WebSocket, room: str, user: str):
+    await websocket.accept()
+    pubsub = redis_client.pubsub()
+    redis_channel = f"room:{room}"
+
+    await pubsub.subscribe(redis_channel)
+    await set_user_online(room, user)
+
+    try:
+        # Enviar últimas mensagens ao conectar
+        last_msgs = await get_last_messages(room)
+        for msg in last_msgs:
+            await websocket.send_json(msg)
+
+        while True:
+            # Receber mensagens do WebSocket
+            data = await websocket.receive_text()
+            if not await check_rate_limit(user):
+                await websocket.send_text("Rate limit exceeded. Please wait.")
+                continue
+
+            msg_doc = {"room": room, "user": user, "msg": data, "timestamp": int(time.time())}
+            await save_message(room, user, data)
+            await redis_client.publish(redis_channel, json.dumps(msg_doc))
+            await set_user_online(room, user)
+
+            # Ler novas mensagens do canal Redis e enviar ao cliente
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.01)
+                if message is None:
+                    break
+                payload = json.loads(message["data"])
+                if websocket.application_state == WebSocketState.CONNECTED:
+                    await websocket.send_json(payload)
+
+    except WebSocketDisconnect:
+        await redis_client.hdel(f"online:{room}", user)
+        await pubsub.unsubscribe(redis_channel)
+    finally:
+        await pubsub.close()
+
+@app.get("/online/{room}")
+async def online_users(room: str):
+    users = await get_online_users(room)
+    return {"online_users": users}
 
 @app.get("/")
-def home():
+async def get():
     return HTMLResponse("""
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Chat Escolar - FastAPI</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Roboto:wght@400&display=swap" rel="stylesheet">
+    <title>Chat Escolar - Roxo & Vermelho</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         :root {
-            --roxo: #7b2ff2;
-            --vermelho: #f11a2a;
+            --cor-roxo: #7c3aed;
+            --cor-roxo-escuro: #4c1d95;
+            --cor-vermelho: #ef4444;
+            --cor-vermelho-escuro: #991b1b;
             --branco: #fff;
-            --cinza: #222;
-            --cinza-claro: #eee;
+            --cinza: #f3f4f6;
         }
         body {
-            background: linear-gradient(135deg, var(--roxo) 60%, var(--vermelho) 100%);
-            height: 100vh;
-            margin: 0;
+            background: linear-gradient(135deg, var(--cor-roxo), var(--cor-vermelho));
             font-family: 'Roboto', Arial, sans-serif;
             color: var(--branco);
+            min-height: 100vh;
+            margin: 0;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
         }
-        .container {
-            background: rgba(34, 34, 34, 0.96);
-            border-radius: 18px;
-            box-shadow: 0 8px 24px 0 rgba(123,47,242,0.15), 0 4px 8px 0 rgba(241,26,42,0.08);
-            padding: 2.5rem 2rem 2rem 2rem;
+        .chat-container {
+            background: var(--cinza);
+            box-shadow: 0 8px 32px 0 rgba(124,58,237,0.25), 0 1px 2px rgba(239,68,68,0.12);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            width: 100%;
             max-width: 420px;
-            width: 100%;
+            min-height: 480px;
+            display: flex;
+            flex-direction: column;
         }
-        h1 {
-            font-family: 'Montserrat', sans-serif;
-            font-size: 2.1rem;
-            margin-bottom: 0.7rem;
-            letter-spacing: 1.5px;
-            color: var(--roxo);
-            text-shadow: 1px 1px 4px var(--vermelho);
+        .chat-header {
+            font-size: 2rem;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--cor-roxo-escuro), var(--cor-vermelho-escuro));
+            color: transparent;
+            background-clip: text;
+            -webkit-background-clip: text;
+            margin-bottom: 1.2rem;
+            text-align: center;
+            letter-spacing: 1px;
         }
-        label {
-            font-size: 1.1rem;
-            margin-bottom: 0.2rem;
-            color: var(--branco);
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 0.6rem;
-            border-radius: 8px;
-            border: none;
-            background: var(--cinza-claro);
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--branco);
+            border-radius: 1rem;
+            padding: 1rem;
             margin-bottom: 1rem;
+            box-shadow: 0 1px 4px rgba(124,58,237,0.08);
+        }
+        .message {
+            margin-bottom: 0.7rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.7rem;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .message.user {
+            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
+            color: var(--branco);
+            align-self: flex-end;
+            text-align: right;
+        }
+        .message.other {
+            background: linear-gradient(90deg, var(--cor-vermelho), var(--cor-roxo));
+            color: var(--branco);
+            align-self: flex-start;
+            text-align: left;
+        }
+        .input-area {
+            display: flex;
+            gap: 0.6rem;
+        }
+        .input-area input, .input-area button {
             font-size: 1rem;
-            color: var(--cinza);
-            outline: none;
-            transition: box-shadow 0.2s;
-        }
-        input[type="text"]:focus {
-            box-shadow: 0 0 0 2px var(--roxo);
-        }
-        button {
-            width: 100%;
-            padding: 0.7rem;
-            border-radius: 12px;
             border: none;
-            background: linear-gradient(90deg, var(--roxo), var(--vermelho));
-            font-family: 'Montserrat', sans-serif;
-            font-size: 1.15rem;
+            outline: none;
+            border-radius: 0.7rem;
+            padding: 0.7rem 1rem;
+        }
+        .input-area input {
+            flex: 1;
+            background: var(--cinza);
+            color: var(--cor-roxo-escuro);
+        }
+        .input-area button {
+            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
             color: var(--branco);
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 2px 8px 0 rgba(123,47,242,0.15), 0 1px 4px 0 rgba(241,26,42,0.08);
-            transition: transform 0.15s;
+            transition: box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(239,68,68,0.15);
         }
-        button:hover {
-            transform: scale(1.05);
-            background: linear-gradient(90deg, var(--vermelho), var(--roxo));
+        .input-area button:hover {
+            box-shadow: 0 4px 16px rgba(124,58,237,0.25), 0 2px 4px rgba(239,68,68,0.22);
         }
-        #chat {
+        .user-form {
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 0.6rem;
+        }
+        .user-form input {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            border-radius: 0.7rem;
+            border: 1px solid var(--cor-roxo-escuro);
             background: var(--cinza);
-            border-radius: 14px;
-            height: 230px;
-            overflow-y: auto;
-            margin: 1.2rem 0 0.7rem 0;
-            padding: 1rem;
-            box-shadow: 0 1px 8px 0 rgba(123,47,242,0.10), 0 1px 4px 0 rgba(241,26,42,0.07);
+            color: var(--cor-vermelho-escuro);
         }
-        .msg {
-            margin-bottom: 0.7rem;
-            padding: 0.5rem 0.9rem;
-            border-radius: 9px;
-            background: linear-gradient(90deg, var(--roxo) 75%, var(--vermelho) 100%);
+        .user-form button {
+            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
             color: var(--branco);
-            font-size: 1.07rem;
-            box-shadow: 0 1px 4px 0 rgba(123,47,242,0.10), 0 1px 4px 0 rgba(241,26,42,0.08);
-            animation: fadeIn 0.9s;
-        }
-        .msg.me {
-            background: linear-gradient(90deg, var(--vermelho) 75%, var(--roxo) 100%);
-            text-align: right;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(30px);}
-            to { opacity: 1; transform: translateY(0);}
-        }
-        #msg, #sendBtn {
-            display: inline-block;
-            vertical-align: middle;
-        }
-        #msg {
-            width: 74%;
-            margin-right: 2%;
-        }
-        #sendBtn {
-            width: 24%;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 1.3rem;
-            font-size: 0.97rem;
-            color: #bdbdbd;
-        }
-        .userTag {
-            color: var(--vermelho);
             font-weight: bold;
+            border: none;
+            padding: 0.7rem 1.2rem;
+            border-radius: 0.7rem;
+            cursor: pointer;
         }
-        .roomTag {
-            color: var(--roxo);
+        .online-users {
+            margin-bottom: 1rem;
+            font-size: 0.96rem;
+            color: var(--cor-roxo-escuro);
+        }
+        .online-users span {
+            background: var(--cor-roxo);
+            color: var(--branco);
+            border-radius: 0.5rem;
+            padding: 0.2rem 0.6rem;
+            margin-right: 0.25rem;
             font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>💬 Chat Escolar</h1>
-        <form id="form">
-            <label for="user">Usuário:</label>
-            <input id="user" type="text" value="aluno123" autocomplete="off"/>
-            <label for="room">Sala:</label>
-            <input id="room" type="text" value="geral" autocomplete="off"/>
-            <button type="submit">Entrar na Sala</button>
+    <div class="chat-container">
+        <div class="chat-header">Chat Escolar <span style="font-size:1.2rem;">💬</span></div>
+        <form class="user-form" id="userForm">
+            <input type="text" id="roomInput" placeholder="Sala (ex: turma1)" required>
+            <input type="text" id="userInput" placeholder="Seu nome" required>
+            <button type="submit">Entrar</button>
         </form>
-        <div id="chat"></div>
-        <input id="msg" type="text" placeholder="Digite sua mensagem..." autocomplete="off"/>
-        <button id="sendBtn" onclick="sendMsg()">Enviar</button>
-        <div class="footer">
-            <span>@claramoledo</span>
-        </div>
+        <div class="online-users" id="onlineUsers"></div>
+        <div class="chat-messages" id="messages"></div>
+        <form class="input-area" id="messageForm" style="display:none;">
+            <input type="text" id="messageInput" placeholder="Digite sua mensagem..." autocomplete="off" required>
+            <button type="submit">Enviar</button>
+        </form>
     </div>
     <script>
-        let ws;
-        let meuUsuario = "";
-        let salaAtual = "";
+        let ws = null;
+        let user = "";
+        let room = "";
 
-        document.getElementById('form').onsubmit = (e) => {
-            e.preventDefault();
-            meuUsuario = document.getElementById('user').value;
-            salaAtual = document.getElementById('room').value;
-            ws = new WebSocket(`ws://${location.host}/ws/${salaAtual}/${meuUsuario}`);
-            document.getElementById('chat').innerHTML = "";
-            ws.onmessage = (msg) => {
-                try {
-                    let obj = eval("(" + msg.data + ")");
-                    let tag = "<span class='userTag'>" + obj.user + "</span>";
-                    let sala = "<span class='roomTag'>#" + obj.room + "</span>";
-                    let hora = new Date(obj.timestamp*1000).toLocaleTimeString('pt-BR',{hour: '2-digit', minute:'2-digit'});
-                    let cls = obj.user == meuUsuario ? "msg me" : "msg";
-                    document.getElementById('chat').innerHTML += `<div class="${cls}">${tag} ${sala} <span style="font-size:0.93em;color:#eee;">[${hora}]</span>:<br>${obj.text}</div>`;
-                } catch {
-                    // Mensagem de texto normal ou erro de rate limit
-                    document.getElementById('chat').innerHTML += `<div class="msg">${msg.data}</div>`;
-                }
-                document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
-            };
-        };
-        function sendMsg() {
-            if (ws && ws.readyState === 1) {
-                let txt = document.getElementById('msg').value;
-                if (txt.trim().length > 0) {
-                    ws.send(txt);
-                    document.getElementById('msg').value = "";
-                }
-            }
+        const messagesDiv = document.getElementById('messages');
+        const onlineUsersDiv = document.getElementById('onlineUsers');
+        const userForm = document.getElementById('userForm');
+        const roomInput = document.getElementById('roomInput');
+        const userInput = document.getElementById('userInput');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+
+        function addMessage(msg, isUser) {
+            const div = document.createElement('div');
+            div.className = 'message ' + (isUser ? 'user' : 'other');
+            div.innerHTML = `<b>${msg.user}:</b> ${msg.msg}`;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-        document.getElementById('msg').addEventListener('keyup', function(e) {
-            if (e.key === 'Enter') sendMsg();
-        });
+
+        function renderOnline(users) {
+            if (users.length === 0) {
+                onlineUsersDiv.innerHTML = `Ninguém online`;
+                return;
+            }
+            onlineUsersDiv.innerHTML = `<b>Online:</b> ` + users.map(u => `<span>${u}</span>`).join('');
+        }
+
+        async function fetchOnlineUsers() {
+            if (!room) return;
+            let resp = await fetch(`/online/${room}`);
+            let data = await resp.json();
+            renderOnline(data.online_users || []);
+        }
+
+        userForm.onsubmit = function(e) {
+            e.preventDefault();
+            user = userInput.value.trim();
+            room = roomInput.value.trim();
+            if (!user || !room) return;
+            userForm.style.display = 'none';
+            messageForm.style.display = '';
+            connectWS();
+            fetchOnlineUsers();
+        };
+
+        messageForm.onsubmit = function(e) {
+            e.preventDefault();
+            let msg = messageInput.value.trim();
+            if (msg && ws && ws.readyState === 1) {
+                ws.send(msg);
+                messageInput.value = '';
+            }
+        };
+
+        function connectWS() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/${room}/${user}`);
+            ws.onopen = () => {
+                addMessage({user: 'Sistema', msg: 'Você entrou na sala.'}, false);
+            };
+            ws.onmessage = (event) => {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    data = {user: 'Sistema', msg: event.data};
+                }
+                addMessage(data, data.user === user);
+                fetchOnlineUsers();
+            };
+            ws.onclose = () => {
+                addMessage({user: 'Sistema', msg: 'Você saiu da sala.'}, false);
+                messageForm.style.display = 'none';
+                userForm.style.display = '';
+            };
+        }
     </script>
 </body>
 </html>
