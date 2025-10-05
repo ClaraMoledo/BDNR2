@@ -1,7 +1,6 @@
 fastapi
-uvicorn[standard]
-pymongo
-redis
-python-dotenv
-redis[async]
+uvicorn
 motor
+redis[async]
+pydantic>=2.0
+pydantic-settings

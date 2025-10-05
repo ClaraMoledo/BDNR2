@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chat BDNR2 - Redis + FastAPI + MongoDB</title>
+  <style>
+    body { font-family: Arial; background: #f4f4f4; margin: 0; padding: 0; }
+    #chat { max-width: 600px; margin: 40px auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px #ccc; padding: 20px; }
+    #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; margin-bottom: 15px; padding: 10px; background: #fafafa;}
+    #online { color: #444; font-size: 0.9em; margin-bottom: 1em;}
+    .msg { margin: 10px 0; }
+    .me { font-weight: bold; color: #007bff; }
+    .user { color: #333; }
+    #form { display: flex; }
+    #input { flex: 1; padding: 8px; font-size: 1em; }
+    #send { padding: 8px 14px; }
+    #roomuser { margin-bottom: 10px; }
+    #error { color: red; margin-top: 10px;}
+  </style>
+</head>
+<body>
+  <div id="chat">
+    <h2>Chat BDNR2</h2>
+    <div id="roomuser">
+      Sala: <input type="text" id="room" value="geral" />
+      Usuário: <input type="text" id="user_id" value="user1" />
+      <button id="connect">Entrar</button>
+    </div>
+    <div id="online"></div>
+    <div id="messages"></div>
+    <form id="form" style="display:none;">
+      <input id="input" autocomplete="off" placeholder="Digite sua mensagem..." />
+      <button id="send">Enviar</button>
+    </form>
+    <div id="error"></div>
+  </div>
+
+  <script>
+    let ws;
+    let room, user_id;
+    const messagesDiv = document.getElementById('messages');
+    const onlineDiv = document.getElementById('online');
+    const errorDiv = document.getElementById('error');
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+
+    document.getElementById('connect').onclick = function() {
+      room = document.getElementById('room').value.trim();
+      user_id = document.getElementById('user_id').value.trim();
+      if (!room || !user_id) {
+        alert('Preencha sala e usuário!');
+        return;
+      }
+      connectWS(room, user_id);
+    };
+
+    function connectWS(room, user_id) {
+      if (ws) ws.close();
+      messagesDiv.innerHTML = '';
+      onlineDiv.innerHTML = '';
+      errorDiv.innerHTML = '';
+      form.style.display = 'flex';
+
+      ws = new WebSocket(`ws://localhost:8000/ws/${room}/${user_id}`);
+
+      ws.onopen = () => {
+        logMessage({user_id: 'sistema', content: 'Conectado!', timestamp: new Date().toISOString()});
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'recent') {
+          messagesDiv.innerHTML = '';
+          (data.messages || []).reverse().forEach(msg => logMessage(msg));
+        } else if (data.type === 'error') {
+          errorDiv.textContent = data.message;
+        } else {
+          logMessage(data);
+        }
+      };
+
+      ws.onclose = () => {
+        logMessage({user_id: 'sistema', content: 'Desconectado!', timestamp: new Date().toISOString()});
+        form.style.display = 'none';
+      };
+    }
+
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      if (!input.value.trim()) return;
+      ws.send(JSON.stringify({content: input.value}));
+      input.value = '';
+    };
+
+    function logMessage(msg) {
+      const {user_id, content, timestamp} = msg;
+      const date = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
+      const who = user_id === user_id ? '<span class="me">Você</span>' : `<span class="user">${user_id}</span>`;
+      messagesDiv.innerHTML += `<div class="msg"><b>${who}</b> <span style="color:#888;font-size:0.9em;">${date}</span>: ${content}</div>`;
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+  </script>
+</body>
+</html>
