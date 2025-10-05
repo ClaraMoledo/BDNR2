@@ -115,241 +115,351 @@ async def online_users(room: str):
     users = await get_online_users(room)
     return {"online_users": users}
 
+
+
+from fastapi.responses import HTMLResponse
+
 @app.get("/")
-async def get():
+async def home():
     return HTMLResponse("""
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <title>Chat Escolar - Roxo & Vermelho</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        :root {
-            --cor-roxo: #7c3aed;
-            --cor-roxo-escuro: #4c1d95;
-            --cor-vermelho: #ef4444;
-            --cor-vermelho-escuro: #991b1b;
-            --branco: #fff;
-            --cinza: #f3f4f6;
-        }
-        body {
-            background: linear-gradient(135deg, var(--cor-roxo), var(--cor-vermelho));
-            font-family: 'Roboto', Arial, sans-serif;
-            color: var(--branco);
-            min-height: 100vh;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .chat-container {
-            background: var(--cinza);
-            box-shadow: 0 8px 32px 0 rgba(124,58,237,0.25), 0 1px 2px rgba(239,68,68,0.12);
-            border-radius: 1.5rem;
-            padding: 2rem;
-            width: 100%;
-            max-width: 420px;
-            min-height: 480px;
-            display: flex;
-            flex-direction: column;
-        }
-        .chat-header {
-            font-size: 2rem;
-            font-weight: bold;
-            background: linear-gradient(90deg, var(--cor-roxo-escuro), var(--cor-vermelho-escuro));
-            color: transparent;
-            background-clip: text;
-            -webkit-background-clip: text;
-            margin-bottom: 1.2rem;
-            text-align: center;
-            letter-spacing: 1px;
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            background: var(--branco);
-            border-radius: 1rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 1px 4px rgba(124,58,237,0.08);
-        }
-        .message {
-            margin-bottom: 0.7rem;
-            padding: 0.4rem 0.8rem;
-            border-radius: 0.7rem;
-            max-width: 80%;
-            word-wrap: break-word;
-        }
-        .message.user {
-            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
-            color: var(--branco);
-            align-self: flex-end;
-            text-align: right;
-        }
-        .message.other {
-            background: linear-gradient(90deg, var(--cor-vermelho), var(--cor-roxo));
-            color: var(--branco);
-            align-self: flex-start;
-            text-align: left;
-        }
-        .input-area {
-            display: flex;
-            gap: 0.6rem;
-        }
-        .input-area input, .input-area button {
-            font-size: 1rem;
-            border: none;
-            outline: none;
-            border-radius: 0.7rem;
-            padding: 0.7rem 1rem;
-        }
-        .input-area input {
-            flex: 1;
-            background: var(--cinza);
-            color: var(--cor-roxo-escuro);
-        }
-        .input-area button {
-            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
-            color: var(--branco);
-            font-weight: bold;
-            cursor: pointer;
-            transition: box-shadow 0.2s;
-            box-shadow: 0 2px 8px rgba(239,68,68,0.15);
-        }
-        .input-area button:hover {
-            box-shadow: 0 4px 16px rgba(124,58,237,0.25), 0 2px 4px rgba(239,68,68,0.22);
-        }
-        .user-form {
-            margin-bottom: 1rem;
-            display: flex;
-            gap: 0.6rem;
-        }
-        .user-form input {
-            flex: 1;
-            padding: 0.7rem 1rem;
-            border-radius: 0.7rem;
-            border: 1px solid var(--cor-roxo-escuro);
-            background: var(--cinza);
-            color: var(--cor-vermelho-escuro);
-        }
-        .user-form button {
-            background: linear-gradient(90deg, var(--cor-roxo), var(--cor-vermelho));
-            color: var(--branco);
-            font-weight: bold;
-            border: none;
-            padding: 0.7rem 1.2rem;
-            border-radius: 0.7rem;
-            cursor: pointer;
-        }
-        .online-users {
-            margin-bottom: 1rem;
-            font-size: 0.96rem;
-            color: var(--cor-roxo-escuro);
-        }
-        .online-users span {
-            background: var(--cor-roxo);
-            color: var(--branco);
-            border-radius: 0.5rem;
-            padding: 0.2rem 0.6rem;
-            margin-right: 0.25rem;
-            font-weight: bold;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Conversa Local - Chat Luxuoso</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+    --roxo: #5B21B6;
+    --roxo-claro: #BFA3F4;
+    --vermelho: #F43F5E;
+    --vermelho-claro: #FCA5A5;
+    --gradiente: linear-gradient(120deg, #5B21B6 0%, #F43F5E 100%);
+    --cinza-bg: #f6f6f9;
+    --branco: #fff;
+    --cinza-card: #f9fafc;
+    --cinza-borda: #ececec;
+    --cinza-texto: #222;
+    --cinza-claro: #e0e7ef;
+    --cinza-medio: #bdbdbd;
+    --fonte: 'Montserrat', 'Roboto', Arial, sans-serif;
+    --azul: #312E81;
+}
+body {
+    background: var(--cinza-bg);
+    font-family: var(--fonte);
+    min-height: 100vh;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+@media (max-width: 600px) {
+    .chat-card { padding: 1rem; min-width: 98vw;}
+    .chat-header {font-size: 1.35rem;}
+}
+.chat-card {
+    background: var(--branco);
+    border-radius: 2.2rem;
+    box-shadow: 0 16px 40px rgba(91,33,182,0.14), 0 2px 10px rgba(244,63,94,0.07);
+    padding: 2.6rem 2.6rem 1.3rem 2.6rem;
+    width: 100%;
+    max-width: 440px;
+    min-height: 540px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    animation: fadeIn 1.2s cubic-bezier(.62,.2,.24,.94);
+    border: 1.5px solid var(--cinza-borda);
+    position: relative;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(.96);}
+    to { opacity: 1; transform: scale(1);}
+}
+.chat-header {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: var(--gradiente);
+    color: transparent;
+    background-clip: text;
+    -webkit-background-clip: text;
+    letter-spacing: 1.5px;
+    text-align: center;
+    margin-bottom: 0.7rem;
+    user-select: none;
+    text-shadow: 0 2px 12px #dfd7f9;
+}
+.user-form {
+    display: flex; gap: 0.8rem; margin-bottom: 0.5rem;
+}
+.user-form input {
+    flex: 1;
+    font-size: 1.1rem;
+    border-radius: 1.1rem;
+    padding: 1rem 1.3rem;
+    border: 1.5px solid var(--cinza-medio);
+    background: var(--cinza-claro);
+    color: var(--cinza-texto);
+    font-family: inherit;
+    outline: none;
+    transition: border-color .3s, box-shadow .2s;
+    box-shadow: 0 1px 6px rgba(91,33,182,0.04);
+}
+.user-form input:focus { border-color: var(--vermelho); }
+.user-form button {
+    background: var(--gradiente);
+    color: var(--branco);
+    font-weight: 700;
+    border: none;
+    padding: 1rem 1.5rem;
+    border-radius: 1.1rem;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1.1rem;
+    letter-spacing: .5px;
+    box-shadow: 0 2px 12px rgba(91,33,182,0.10);
+    transition: box-shadow .2s, transform .2s;
+}
+.user-form button:hover {
+    box-shadow: 0 8px 22px rgba(244,63,94,0.14);
+    transform: scale(1.04);
+}
+.online-users {
+    margin-bottom: 0.8rem;
+    font-size: 1.09rem;
+    color: var(--azul);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+    min-height: 1.3rem;
+}
+.online-users span {
+    background: var(--gradiente);
+    color: var(--branco);
+    border-radius: 0.8rem;
+    padding: 0.2rem 1rem;
+    margin-right: 0.2rem;
+    font-weight: 700;
+    font-size: 1.02rem;
+    display: inline-block;
+    box-shadow: 0 1px 4px rgba(91,33,182,0.10);
+    letter-spacing: .3px;
+    animation: popIn .7s cubic-bezier(.62,.2,.24,.94);
+}
+@keyframes popIn { from {transform: scale(0.85);} to {transform: scale(1);} }
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--cinza-card);
+    border-radius: 1.7rem;
+    padding: 1.1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 8px rgba(91,33,182,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    border: 1px solid var(--cinza-borda);
+}
+.message {
+    margin-bottom: 0.4rem;
+    padding: 1rem 1.4rem;
+    border-radius: 1.4rem;
+    max-width: 85%;
+    word-wrap: break-word;
+    box-shadow: 0 2px 18px rgba(244,63,94,0.08);
+    position: relative;
+    animation: fadeMsg .7s cubic-bezier(.62,.2,.24,.94);
+    font-size: 1.13rem;
+    color: #2d2940;
+    font-family: 'Montserrat', Arial, sans-serif;
+    border: 1px solid #f3e8ff;
+}
+@keyframes fadeMsg { from { opacity: 0; transform: translateY(16px);} to { opacity: 1; transform: none;} }
+.message.user {
+    background: linear-gradient(90deg, #f1eafe 60%, #ffe4ec 100%);
+    color: var(--roxo);
+    align-self: flex-end;
+    text-align: right;
+    border-bottom-right-radius: 0.3rem;
+    border-top-left-radius: 1.7rem;
+    border: 1.5px solid #bfa3f4;
+}
+.message.other {
+    background: linear-gradient(90deg, #ffe4ec 30%, #f1eafe 100%);
+    color: var(--vermelho);
+    align-self: flex-start;
+    text-align: left;
+    border-bottom-left-radius: 0.3rem;
+    border-top-right-radius: 1.7rem;
+    border: 1.5px solid #fca5a5;
+}
+.message .tag {
+    font-size: 1.01rem;
+    font-weight: bold;
+    background: var(--gradiente);
+    color: var(--branco);
+    border-radius: 0.7rem;
+    padding: 0.13rem 0.9rem;
+    margin-right: 0.65rem;
+    box-shadow: 0 1px 3px rgba(91,33,182,0.13);
+}
+.input-area {
+    display: flex;
+    gap: 0.8rem;
+}
+.input-area input, .input-area button {
+    font-size: 1.1rem;
+    border: none;
+    outline: none;
+    border-radius: 1.1rem;
+    padding: 1rem 1.2rem;
+    font-family: inherit;
+}
+.input-area input {
+    flex: 1;
+    background: var(--cinza-claro);
+    color: #3c355c;
+    border: 1.5px solid var(--cinza-borda);
+}
+.input-area input:focus { border-color: var(--roxo); }
+.input-area button {
+    background: var(--gradiente);
+    color: var(--branco);
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 1.1rem;
+    letter-spacing: .3px;
+    box-shadow: 0 2px 12px rgba(244,63,94,0.13);
+    transition: box-shadow .2s, transform .2s;
+}
+.input-area button:hover {
+    box-shadow: 0 8px 22px rgba(91,33,182,0.20), 0 2px 8px rgba(244,63,94,0.22);
+    transform: scale(1.04);
+}
+.sistema-msg {
+    color: var(--vermelho);
+    background: var(--cinza-claro);
+    border-radius: 1.1rem;
+    padding: 0.6rem 1.2rem;
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 1px 10px rgba(91,33,182,0.11);
+    letter-spacing: .3px;
+}
+::-webkit-scrollbar {
+    width: 7px;
+    background: var(--cinza-claro);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--roxo);
+    border-radius: 5px;
+}
+</style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">Chat Escolar <span style="font-size:1.2rem;">💬</span></div>
-        <form class="user-form" id="userForm">
-            <input type="text" id="roomInput" placeholder="Sala (ex: turma1)" required>
-            <input type="text" id="userInput" placeholder="Seu nome" required>
-            <button type="submit">Entrar</button>
-        </form>
-        <div class="online-users" id="onlineUsers"></div>
-        <div class="chat-messages" id="messages"></div>
-        <form class="input-area" id="messageForm" style="display:none;">
-            <input type="text" id="messageInput" placeholder="Digite sua mensagem..." autocomplete="off" required>
-            <button type="submit">Enviar</button>
-        </form>
-    </div>
-    <script>
-        let ws = null;
-        let user = "";
-        let room = "";
+<div class="chat-card">
+    <div class="chat-header">Conversa Local <span style="font-size:1.5rem;">💬</span></div>
+    <form class="user-form" id="userForm">
+        <input type="text" id="roomInput" placeholder="Sala (ex: gourmet)" required>
+        <input type="text" id="userInput" placeholder="Seu nome" required>
+        <button type="submit">Entrar</button>
+    </form>
+    <div class="online-users" id="onlineUsers"></div>
+    <div class="chat-messages" id="messages"></div>
+    <form class="input-area" id="messageForm" style="display:none;">
+        <input type="text" id="messageInput" placeholder="Digite sua mensagem..." autocomplete="off" required>
+        <button type="submit">Enviar</button>
+    </form>
+</div>
+<script>
+let ws = null;
+let user = "";
+let room = "";
 
-        const messagesDiv = document.getElementById('messages');
-        const onlineUsersDiv = document.getElementById('onlineUsers');
-        const userForm = document.getElementById('userForm');
-        const roomInput = document.getElementById('roomInput');
-        const userInput = document.getElementById('userInput');
-        const messageForm = document.getElementById('messageForm');
-        const messageInput = document.getElementById('messageInput');
+const messagesDiv = document.getElementById('messages');
+const onlineUsersDiv = document.getElementById('onlineUsers');
+const userForm = document.getElementById('userForm');
+const roomInput = document.getElementById('roomInput');
+const userInput = document.getElementById('userInput');
+const messageForm = document.getElementById('messageForm');
+const messageInput = document.getElementById('messageInput');
 
-        function addMessage(msg, isUser) {
-            const div = document.createElement('div');
-            div.className = 'message ' + (isUser ? 'user' : 'other');
-            div.innerHTML = `<b>${msg.user}:</b> ${msg.msg}`;
-            messagesDiv.appendChild(div);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+function addMessage(msg, isUser) {
+    const div = document.createElement('div');
+    div.className = 'message ' + (isUser ? 'user' : 'other');
+    div.innerHTML = `<span class="tag">${msg.user}</span> ${msg.msg}`;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+function addSystemMessage(txt) {
+    const div = document.createElement('div');
+    div.className = 'sistema-msg';
+    div.textContent = txt;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+function renderOnline(users) {
+    if (!users || users.length === 0) {
+        onlineUsersDiv.innerHTML = `Ninguém online`;
+        return;
+    }
+    onlineUsersDiv.innerHTML = `<b>Online:</b> ` + users.map(u => `<span>${u}</span>`).join('');
+}
+async function fetchOnlineUsers() {
+    if (!room) return;
+    let resp = await fetch(`/online/${room}`);
+    let data = await resp.json();
+    renderOnline(data.online_users || []);
+}
+userForm.onsubmit = function(e) {
+    e.preventDefault();
+    user = userInput.value.trim();
+    room = roomInput.value.trim();
+    if (!user || !room) return;
+    userForm.style.display = 'none';
+    messageForm.style.display = '';
+    connectWS();
+    fetchOnlineUsers();
+};
+messageForm.onsubmit = function(e) {
+    e.preventDefault();
+    let msg = messageInput.value.trim();
+    if (msg && ws && ws.readyState === 1) {
+        ws.send(msg);
+        messageInput.value = '';
+    }
+};
+function connectWS() {
+    ws = new WebSocket(`ws://${window.location.host}/ws/${room}/${user}`);
+    ws.onopen = () => {
+        addSystemMessage('Bem-vindo(a)! Você entrou na sala.');
+    };
+    ws.onmessage = (event) => {
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch {
+            data = {user: 'Sistema', msg: event.data};
         }
-
-        function renderOnline(users) {
-            if (users.length === 0) {
-                onlineUsersDiv.innerHTML = `Ninguém online`;
-                return;
-            }
-            onlineUsersDiv.innerHTML = `<b>Online:</b> ` + users.map(u => `<span>${u}</span>`).join('');
+        if(data.user && data.user === user){
+            addMessage(data, true);
+        } else {
+            addMessage(data, false);
         }
-
-        async function fetchOnlineUsers() {
-            if (!room) return;
-            let resp = await fetch(`/online/${room}`);
-            let data = await resp.json();
-            renderOnline(data.online_users || []);
-        }
-
-        userForm.onsubmit = function(e) {
-            e.preventDefault();
-            user = userInput.value.trim();
-            room = roomInput.value.trim();
-            if (!user || !room) return;
-            userForm.style.display = 'none';
-            messageForm.style.display = '';
-            connectWS();
-            fetchOnlineUsers();
-        };
-
-        messageForm.onsubmit = function(e) {
-            e.preventDefault();
-            let msg = messageInput.value.trim();
-            if (msg && ws && ws.readyState === 1) {
-                ws.send(msg);
-                messageInput.value = '';
-            }
-        };
-
-        function connectWS() {
-            ws = new WebSocket(`ws://${window.location.host}/ws/${room}/${user}`);
-            ws.onopen = () => {
-                addMessage({user: 'Sistema', msg: 'Você entrou na sala.'}, false);
-            };
-            ws.onmessage = (event) => {
-                let data;
-                try {
-                    data = JSON.parse(event.data);
-                } catch {
-                    data = {user: 'Sistema', msg: event.data};
-                }
-                addMessage(data, data.user === user);
-                fetchOnlineUsers();
-            };
-            ws.onclose = () => {
-                addMessage({user: 'Sistema', msg: 'Você saiu da sala.'}, false);
-                messageForm.style.display = 'none';
-                userForm.style.display = '';
-            };
-        }
-    </script>
+        fetchOnlineUsers();
+    };
+    ws.onclose = () => {
+        addSystemMessage('Você saiu da sala.');
+        messageForm.style.display = 'none';
+        userForm.style.display = '';
+    };
+}
+</script>
 </body>
 </html>
-    """)
+""")
